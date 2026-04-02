@@ -330,9 +330,15 @@ export default function App() {
         {page === "admin" && currentUser?.role === "admin" && (
           <AdminPanel
             users={users}
+            currentUser={currentUser}
             onCreateUser={u => {
               setUsers(prev => [...prev, { ...u, id: Date.now() }]);
               addToast(`User "${u.name}" created successfully!`, "success");
+            }}
+            onDeleteUser={id => {
+              const target = users.find(u => u.id === id);
+              setUsers(prev => prev.filter(u => u.id !== id));
+              addToast(`User "${target?.name}" has been removed.`, "info");
             }}
           />
         )}

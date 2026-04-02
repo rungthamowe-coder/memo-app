@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { DEPARTMENTS } from "../constants";
 
-export default function AdminPanel({ users, onCreateUser }) {
+export default function AdminPanel({ users, currentUser, onCreateUser, onDeleteUser }) {
   const [form, setForm] = useState({
     name: "", username: "", password: "", email: "", department: "", role: "user",
   });
-  const [errors, setErrors]   = useState({});
-  const [success, setSuccess] = useState(false);
+  const [errors,       setErrors]       = useState({});
+  const [success,      setSuccess]      = useState(false);
+  const [confirmingId, setConfirmingId] = useState(null); // which user is pending delete confirm
 
   const validate = () => {
     const e = {};
@@ -30,6 +31,19 @@ export default function AdminPanel({ users, onCreateUser }) {
     setTimeout(() => setSuccess(false), 3000);
   };
 
+  const handleDeleteClick = (userId) => {
+    setConfirmingId(userId); // show confirmation for this user
+  };
+
+  const handleConfirmDelete = (userId) => {
+    onDeleteUser(userId);
+    setConfirmingId(null);
+  };
+
+  const handleCancelDelete = () => {
+    setConfirmingId(null);
+  };
+
   const inputCls = (k) =>
     `w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
       errors[k] ? "border-red-400" : "border-gray-200"
@@ -45,7 +59,7 @@ export default function AdminPanel({ users, onCreateUser }) {
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Admin Panel</h2>
       <div className="grid grid-cols-2 gap-6">
 
-        {/* Create User Form */}
+        {/* ── Create User Form ── */}
         <div className="bg-white rounded-2xl shadow p-6">
           <h3 className="font-bold text-gray-700 mb-5 text-base">Create New User</h3>
 
@@ -57,10 +71,10 @@ export default function AdminPanel({ users, onCreateUser }) {
 
           <div className="space-y-4">
             {[
-              { label: "Full Name", key: "name",     placeholder: "e.g. Jane Doe",         type: "text"     },
-              { label: "Username",  key: "username",  placeholder: "e.g. jane",             type: "text"     },
-              { label: "Password",  key: "password",  placeholder: "Set a password",        type: "password" },
-              { label: "Email",     key: "email",     placeholder: "jane@company.com",      type: "email"    },
+              { label: "Full Name", key: "name",     placeholder: "e.g. Jane Doe",    type: "text"     },
+              { label: "Username",  key: "username",  placeholder: "e.g. jane",        type: "text"     },
+              { label: "Password",  key: "password",  placeholder: "Set a password",   type: "password" },
+              { label: "Email",     key: "email",     placeholder: "jane@company.com", type: "email"    },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-sm font-semibold text-gray-600 mb-1">
@@ -125,27 +139,75 @@ export default function AdminPanel({ users, onCreateUser }) {
           </div>
         </div>
 
-        {/* Users List */}
+        {/* ── Users List ── */}
         <div className="bg-white rounded-2xl shadow p-6">
           <h3 className="font-bold text-gray-700 mb-5 text-base">
             All Users ({users.length})
           </h3>
           <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
             {users.map(u => (
-              <div
-                key={u.id}
-                className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 text-sm"
-              >
-                <div>
-                  <p className="font-semibold text-gray-800">{u.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">@{u.username} · {u.department}</p>
-                  {u.email && (
-                    <p className="text-xs text-blue-400 mt-0.5">{u.email}</p>
-                  )}
-                </div>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${roleColors[u.role]}`}>
-                  {u.role}
-                </span>
+              <div key={u.id}>
+
+                {/* Normal user row */}
+                {confirmingId !== u.id && (
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 text-sm">
+                    <div>
+                      <p className="font-semibold text-gray-800">{u.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">@{u.username} · {u.department}</p>
+                      {u.email && (
+                        <p className="text-xs text-blue-400 mt-0.5">{u.email}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${roleColors[u.role]}`}>
+                        {u.role}
+                      </span>
+                      {/* Cannot delete yourself */}
+                      {u.id !== currentUser.id && (
+                        <button
+                          onClick={() => handleDeleteClick(u.id)}
+                          className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg p-1.5 transition"
+                          title="Remove user"
+                        >
+                          🗑
+                        </button>
+                      )}
+                      {/* Show lock icon for current user — can't delete yourself */}
+                      {u.id === currentUser.id && (
+                        <span className="text-gray-300 p-1.5" title="You cannot remove your own account">
+                          🔒
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirmation row */}
+                {confirmingId === u.id && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm">
+                    <p className="font-semibold text-red-700 mb-1">
+                      Remove <span className="underline">{u.name}</span>?
+                    </p>
+                    <p className="text-xs text-red-500 mb-3">
+                      This cannot be undone. The user will no longer be able to log in.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleConfirmDelete(u.id)}
+                        className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-red-700 transition"
+                      >
+                        Yes, Remove
+                      </button>
+                      <button
+                        onClick={handleCancelDelete}
+                        className="border border-gray-200 px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-white transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
               </div>
             ))}
           </div>
