@@ -1,30 +1,40 @@
 import { useState } from "react";
 import StatusBadge from "./StatusBadge";
 
-export default function Dashboard({ memos, currentUser, users, onView, onCreate }) {
+export default function Dashboard({ memos, currentUser, users, onView, onCreate, onTogglePin }) {
   const [activeTab, setActiveTab] = useState("active");
 
   const uid           = currentUser.id;
+  const pinnedIds     = currentUser.pinnedMemos || [];
   const myMemos       = memos.filter(m => m.createdBy === uid);
   const toApprove     = memos.filter(m => m.authorizerId   === uid && m.status === "pending");
   const toAcknowledge = memos.filter(m => m.acknowledgerId === uid && m.status === "approved");
 
   const historyMemos = memos
     .filter(m =>
-      m.createdBy === uid ||
-      m.issuerId === uid ||
-      m.authorizerId === uid ||
+      m.createdBy      === uid ||
+      m.issuerId       === uid ||
+      m.authorizerId   === uid ||
       m.acknowledgerId === uid
     )
     .filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i)
-    .sort((a, b) => b.id - a.id);
+    .sort((a, b) => {
+      // Pinned items float to the top
+      const aPinned = pinnedIds.includes(a.id) ? 1 : 0;
+      const bPinned = pinnedIds.includes(b.id) ? 1 : 0;
+      if (bPinned !== aPinned) return bPinned - aPinned;
+      return b.id - a.id;
+    });
+
+  // Pinned memos (across all memos the user is involved in)
+  const pinnedMemos = historyMemos.filter(m => pinnedIds.includes(m.id));
 
   const getRoles = (m) => {
     const roles = [];
-    if (m.createdBy      === uid)                         roles.push("Creator");
+    if (m.createdBy      === uid)                               roles.push("Creator");
     if (m.issuerId       === uid && m.issuerId !== m.createdBy) roles.push("Issuer");
-    if (m.authorizerId   === uid)                         roles.push("Authorizer");
-    if (m.acknowledgerId === uid)                         roles.push("Acknowledger");
+    if (m.authorizerId   === uid)                               roles.push("Authorizer");
+    if (m.acknowledgerId === uid)                               roles.push("Acknowledger");
     return roles.length ? roles : ["Involved"];
   };
 
@@ -37,7 +47,10 @@ export default function Dashboard({ memos, currentUser, users, onView, onCreate 
       Involved:     "bg-gray-100   text-gray-600",
     };
     return (
-      <span key={role} className={`text-xs font-semibold px-2 py-0.5 rounded-full mr-1 ${map[role] || "bg-gray-100 text-gray-600"}`}>
+      <span
+        key={role}
+        className={`text-xs font-semibold px-2 py-0.5 rounded-full mr-1 ${map[role] || "bg-gray-100 text-gray-600"}`}
+      >
         {role}
       </span>
     );
@@ -49,6 +62,48 @@ export default function Dashboard({ memos, currentUser, users, onView, onCreate 
       <div className="text-sm font-medium mt-1 opacity-80">{icon} {label}</div>
     </div>
   );
+
+  // Shared row component used by all tables
+  const MemoRow = ({ m, showRole = false }) => {
+    const isPinned = pinnedIds.includes(m.id);
+    return (
+      <tr className="border-t hover:bg-slate-50 transition">
+        <td className="px-5 py-3 font-semibold text-gray-800">
+          <span className="flex items-center gap-1.5">
+            {isPinned && <span className="text-amber-500 text-xs">📌</span>}
+            {m.title}
+          </span>
+        </td>
+        <td className="px-5 py-3 text-gray-500">{m.toDepartment}</td>
+        {showRole && (
+          <td className="px-5 py-3">{getRoles(m).map(r => roleBadge(r))}</td>
+        )}
+        <td className="px-5 py-3"><StatusBadge status={m.status} /></td>
+        <td className="px-5 py-3 text-gray-400 text-xs">{m.createdAt}</td>
+        <td className="px-5 py-3 text-right">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => onTogglePin(m.id)}
+              title={isPinned ? "Unpin memo" : "Pin memo"}
+              className={`text-xs px-2 py-1 rounded-lg transition ${
+                isPinned
+                  ? "text-amber-600 hover:bg-amber-50"
+                  : "text-gray-300 hover:text-amber-500 hover:bg-amber-50"
+              }`}
+            >
+              📌
+            </button>
+            <button
+              onClick={() => onView(m.id)}
+              className="text-blue-600 hover:text-blue-800 text-xs font-semibold hover:underline"
+            >
+              View →
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   const Table = ({ items, title, emptyMsg, showRole = false }) => (
     <div className="mb-8">
@@ -70,23 +125,7 @@ export default function Dashboard({ memos, currentUser, users, onView, onCreate 
             </thead>
             <tbody>
               {items.map(m => (
-                <tr key={m.id} className="border-t hover:bg-slate-50 transition">
-                  <td className="px-5 py-3 font-semibold text-gray-800">{m.title}</td>
-                  <td className="px-5 py-3 text-gray-500">{m.toDepartment}</td>
-                  {showRole && (
-                    <td className="px-5 py-3">{getRoles(m).map(r => roleBadge(r))}</td>
-                  )}
-                  <td className="px-5 py-3"><StatusBadge status={m.status} /></td>
-                  <td className="px-5 py-3 text-gray-400 text-xs">{m.createdAt}</td>
-                  <td className="px-5 py-3 text-right">
-                    <button
-                      onClick={() => onView(m.id)}
-                      className="text-blue-600 hover:text-blue-800 text-xs font-semibold hover:underline"
-                    >
-                      View →
-                    </button>
-                  </td>
-                </tr>
+                <MemoRow key={m.id} m={m} showRole={showRole} />
               ))}
             </tbody>
           </table>
@@ -107,6 +146,7 @@ export default function Dashboard({ memos, currentUser, users, onView, onCreate 
         </button>
       </div>
 
+      {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <Card label="Total Involved"       count={historyMemos.length}  color="bg-slate-100  text-slate-700"  icon="🗂" />
         <Card label="My Memos"             count={myMemos.length}       color="bg-blue-50    text-blue-800"   icon="📄" />
@@ -114,6 +154,7 @@ export default function Dashboard({ memos, currentUser, users, onView, onCreate 
         <Card label="Needs Acknowledgment" count={toAcknowledge.length} color="bg-green-50   text-green-800"  icon="✅" />
       </div>
 
+      {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
         {[
           { key: "active",  label: "Active",       badge: toApprove.length + toAcknowledge.length },
@@ -138,9 +179,18 @@ export default function Dashboard({ memos, currentUser, users, onView, onCreate 
 
       {activeTab === "active" && (
         <>
-          <Table items={toApprove}     title="⚡ Pending My Approval"      emptyMsg="No memos waiting for your approval." />
-          <Table items={toAcknowledge} title="✅ Needs My Acknowledgment"  emptyMsg="No memos waiting for your acknowledgment." />
-          <Table items={myMemos}       title="📄 My Memos"                 emptyMsg="You haven't created any memos yet. Click '+ New Memo' to start." />
+          {/* Pinned section (active tab) */}
+          {pinnedMemos.length > 0 && (
+            <Table
+              items={pinnedMemos}
+              title="📌 Pinned Memos"
+              emptyMsg=""
+              showRole
+            />
+          )}
+          <Table items={toApprove}     title="⚡ Pending My Approval"     emptyMsg="No memos waiting for your approval."        />
+          <Table items={toAcknowledge} title="✅ Needs My Acknowledgment" emptyMsg="No memos waiting for your acknowledgment."  />
+          <Table items={myMemos}       title="📄 My Memos"                emptyMsg="You haven't created any memos yet. Click '+ New Memo' to start." />
         </>
       )}
 

@@ -52,9 +52,7 @@ export default function LoginPage({ form, setForm, onLogin, error }) {
         </div>
 
         <div className="mt-6 bg-slate-50 rounded-xl p-4 text-xs text-gray-500 text-center">
-          <p className="font-semibold text-gray-600">Demo Accounts</p>
-          <p className="mt-1">admin · john · sarah · mike · diana</p>
-          <p className="text-gray-400 mt-1">Contact your administrator for credentials.</p>
+          <p className="text-gray-400">Contact your administrator for credentials.</p>
         </div>
       </div>
     </div>

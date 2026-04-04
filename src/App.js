@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { INITIAL_USERS } from "./constants";
-import LoginPage   from "./components/LoginPage";
-import Navbar      from "./components/Navbar";
-import Dashboard   from "./components/Dashboard";
-import MemoForm    from "./components/MemoForm";
-import ViewMemo    from "./components/ViewMemo";
-import AdminPanel  from "./components/AdminPanel";
+import LoginPage        from "./components/LoginPage";
+import Navbar           from "./components/Navbar";
+import Dashboard        from "./components/Dashboard";
+import MemoForm         from "./components/MemoForm";
+import ViewMemo         from "./components/ViewMemo";
+import AdminPanel       from "./components/AdminPanel";
+import AccountSettings  from "./components/AccountSettings";
+import UserProfile      from "./components/UserProfile";
+import TeamDirectory    from "./components/TeamDirectory";
 
 // ─────────────────────────────────────────────
 // TOAST NOTIFICATION SYSTEM
@@ -68,6 +71,7 @@ export default function App() {
   const [currentUser,    setCurrentUser]    = useState(null);
   const [page,           setPage]           = useState("login");
   const [selectedMemoId, setSelectedMemoId] = useState(null);
+  const [selectedUserId, setSelectedUserId] = useState(null);
   const [loginForm,      setLoginForm]      = useState({ username: "", password: "" });
   const [loginError,     setLoginError]     = useState("");
   const [toasts,         setToasts]         = useState([]);
@@ -80,6 +84,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("memo-app-memos", JSON.stringify(memos));
   }, [memos]);
+
+  // Keep currentUser in sync when users array changes
+  useEffect(() => {
+    if (currentUser) {
+      const updated = users.find(u => u.id === currentUser.id);
+      if (updated) setCurrentUser(updated);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users]);
 
   // ── Toast helpers ──────────────────────────
   const addToast = (message, type = "info") => {
@@ -121,6 +134,35 @@ export default function App() {
     setPage("login");
     setLoginForm({ username: "", password: "" });
     setSelectedMemoId(null);
+    setSelectedUserId(null);
+  };
+
+  // ── Account settings ───────────────────────
+  const handleChangePassword = (userId, newPassword) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, password: newPassword } : u));
+    addToast("Password changed successfully!", "success");
+  };
+
+  const handleUpdateProfile = (userId, { name, username }) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, name, username } : u));
+    addToast("Profile updated successfully!", "success");
+  };
+
+  // ── Pin / Unpin memo ───────────────────────
+  const handleTogglePin = (memoId) => {
+    const pinned    = currentUser.pinnedMemos || [];
+    const isPinned  = pinned.includes(memoId);
+    const next      = isPinned ? pinned.filter(id => id !== memoId) : [...pinned, memoId];
+    setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, pinnedMemos: next } : u));
+    addToast(isPinned ? "Memo unpinned." : "📌 Memo pinned!", "success");
+  };
+
+  // ── Admin: delete memo ─────────────────────
+  const handleDeleteMemo = (memoId) => {
+    const memo = memos.find(m => m.id === memoId);
+    setMemos(prev => prev.filter(m => m.id !== memoId));
+    setPage("dashboard");
+    addToast(`Memo "${memo?.title}" deleted.`, "info");
   };
 
   // ── Memo actions ───────────────────────────
@@ -140,7 +182,6 @@ export default function App() {
     };
     setMemos(prev => [...prev, newMemo]);
 
-    // Notify the Authorizer
     const authorizer = users.find(u => u.id === Number(data.authorizerId));
     if (authorizer) {
       notifyByEmail(
@@ -177,7 +218,6 @@ export default function App() {
     const memo = memos.find(m => m.id === id);
     updateMemoStatus(id, "approved", "Approved");
 
-    // Notify the Acknowledger
     const acknowledger = memo && users.find(u => u.id === memo.acknowledgerId);
     if (acknowledger) {
       notifyByEmail(
@@ -196,7 +236,6 @@ export default function App() {
     const memo = memos.find(m => m.id === id);
     updateMemoStatus(id, "rejected", "Rejected", note);
 
-    // Notify the Creator
     const creator = memo && users.find(u => u.id === memo.createdBy);
     if (creator && creator.id !== currentUser.id) {
       notifyByEmail(
@@ -216,7 +255,6 @@ export default function App() {
     const memo = memos.find(m => m.id === id);
     updateMemoStatus(id, "acknowledged", "Acknowledged");
 
-    // Notify the Creator
     const creator = memo && users.find(u => u.id === memo.createdBy);
     if (creator && creator.id !== currentUser.id) {
       notifyByEmail(
@@ -246,7 +284,6 @@ export default function App() {
         : m
     ));
 
-    // Re-notify the Authorizer
     const authorizer = users.find(u => u.id === Number(updatedData.authorizerId));
     if (authorizer) {
       notifyByEmail(
@@ -264,6 +301,12 @@ export default function App() {
   };
 
   const selectedMemo = memos.find(m => m.id === selectedMemoId);
+  const profileUser  = users.find(u => u.id === selectedUserId);
+
+  const goToProfile = (userId) => {
+    setSelectedUserId(userId);
+    setPage("profile");
+  };
 
   // ── Render ─────────────────────────────────
   if (page === "login") {
@@ -280,7 +323,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-100">
       <Toast toasts={toasts} onDismiss={dismissToast} />
-      <Navbar currentUser={currentUser} onLogout={handleLogout} setPage={setPage} />
+      <Navbar
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        setPage={setPage}
+        onSettings={() => setPage("settings")}
+        onTeam={() => setPage("team")}
+      />
 
       <div className="max-w-5xl mx-auto px-4 py-6">
 
@@ -291,6 +340,7 @@ export default function App() {
             users={users}
             onView={id => { setSelectedMemoId(id); setPage("view"); }}
             onCreate={() => setPage("create")}
+            onTogglePin={handleTogglePin}
           />
         )}
 
@@ -313,6 +363,9 @@ export default function App() {
             onAcknowledge={() => handleAcknowledge(selectedMemoId)}
             onEdit={() => setPage("edit")}
             onBack={() => setPage("dashboard")}
+            onTogglePin={() => handleTogglePin(selectedMemoId)}
+            onDeleteMemo={() => handleDeleteMemo(selectedMemoId)}
+            onViewProfile={goToProfile}
           />
         )}
 
@@ -342,6 +395,34 @@ export default function App() {
             }}
           />
         )}
+
+        {page === "settings" && currentUser && (
+          <AccountSettings
+            currentUser={currentUser}
+            users={users}
+            onChangePassword={handleChangePassword}
+            onUpdateProfile={handleUpdateProfile}
+            onBack={() => setPage(currentUser.role === "admin" ? "admin" : "dashboard")}
+          />
+        )}
+
+        {page === "team" && (
+          <TeamDirectory
+            users={users}
+            currentUser={currentUser}
+            onViewProfile={goToProfile}
+          />
+        )}
+
+        {page === "profile" && profileUser && (
+          <UserProfile
+            profileUser={profileUser}
+            currentUser={currentUser}
+            memos={memos}
+            onBack={() => setPage("team")}
+          />
+        )}
+
       </div>
     </div>
   );

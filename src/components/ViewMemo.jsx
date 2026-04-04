@@ -129,9 +129,11 @@ function downloadMemo(memo, users) {
 export default function ViewMemo({
   memo, currentUser, users,
   onApprove, onReject, onAcknowledge, onEdit, onBack,
+  onTogglePin, onDeleteMemo, onViewProfile,
 }) {
-  const [showRejectBox, setShowRejectBox] = useState(false);
-  const [rejectNote, setRejectNote]       = useState("");
+  const [showRejectBox,    setShowRejectBox]    = useState(false);
+  const [rejectNote,       setRejectNote]       = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const get     = id => users.find(u => u.id === id);
   const issuer  = get(memo.issuerId);
@@ -142,12 +144,28 @@ export default function ViewMemo({
   const canApprove     = currentUser.id === memo.authorizerId   && memo.status === "pending";
   const canAcknowledge = currentUser.id === memo.acknowledgerId && memo.status === "approved";
   const canEdit        = currentUser.id === memo.createdBy      && memo.status === "rejected";
+  const isAdmin        = currentUser.role === "admin";
+  const isPinned       = (currentUser.pinnedMemos || []).includes(memo.id);
 
   const statusBg = {
     pending:      "bg-yellow-50 border-yellow-200",
     approved:     "bg-green-50  border-green-200",
     rejected:     "bg-red-50    border-red-200",
     acknowledged: "bg-blue-50   border-blue-200",
+  };
+
+  // Clickable user name component
+  const UserLink = ({ user }) => {
+    if (!user) return <span className="font-semibold text-gray-800">—</span>;
+    return (
+      <button
+        onClick={() => onViewProfile && onViewProfile(user.id)}
+        className="font-semibold text-blue-700 hover:underline hover:text-blue-900 transition text-left"
+        title={`View ${user.name}'s profile`}
+      >
+        {user.name}
+      </button>
+    );
   };
 
   return (
@@ -160,8 +178,22 @@ export default function ViewMemo({
           <h2 className="text-2xl font-bold text-gray-800">View Memo</h2>
         </div>
 
-        {/* Export / Print buttons */}
+        {/* Top-right action buttons */}
         <div className="flex gap-2">
+          {/* Pin / Unpin */}
+          <button
+            onClick={onTogglePin}
+            title={isPinned ? "Unpin memo" : "Pin memo"}
+            className={`flex items-center gap-1.5 border px-4 py-2 rounded-xl text-xs font-semibold transition ${
+              isPinned
+                ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            📌 {isPinned ? "Unpin" : "Pin"}
+          </button>
+
+          {/* Download */}
           <button
             onClick={() => downloadMemo(memo, users)}
             className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-xs font-semibold hover:bg-gray-50 transition"
@@ -169,6 +201,8 @@ export default function ViewMemo({
           >
             ⬇ Download
           </button>
+
+          {/* Print */}
           <button
             onClick={() => window.print()}
             className="flex items-center gap-1.5 border border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-xs font-semibold hover:bg-gray-50 transition"
@@ -176,8 +210,43 @@ export default function ViewMemo({
           >
             🖨 Print
           </button>
+
+          {/* Admin: Delete memo */}
+          {isAdmin && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-1.5 border border-red-200 text-red-600 px-4 py-2 rounded-xl text-xs font-semibold hover:bg-red-50 transition"
+              title="Delete this memo (admin)"
+            >
+              🗑 Delete
+            </button>
+          )}
         </div>
       </div>
+
+      {/* ── Admin Delete Confirmation ── */}
+      {showDeleteConfirm && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl px-6 py-5 mb-5 shadow">
+          <p className="font-bold text-red-700 text-base mb-1">Delete this memo?</p>
+          <p className="text-sm text-red-500 mb-4">
+            This action cannot be undone. The memo and all its activity history will be permanently removed.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => { onDeleteMemo(); setShowDeleteConfirm(false); }}
+              className="bg-red-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-red-700 transition"
+            >
+              Yes, Delete Permanently
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="border border-gray-200 px-6 py-2 rounded-xl text-sm font-medium hover:bg-white transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow p-7 space-y-6">
 
@@ -185,7 +254,10 @@ export default function ViewMemo({
         <div className={`border rounded-2xl p-4 ${statusBg[memo.status] || "bg-gray-50 border-gray-200"}`}>
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-xl font-bold text-gray-900">{memo.title}</h3>
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                {isPinned && <span className="text-amber-500 text-base">📌</span>}
+                {memo.title}
+              </h3>
               <p className="text-sm text-gray-500 mt-0.5">{memo.header}</p>
             </div>
             <StatusBadge status={memo.status} />
@@ -196,7 +268,7 @@ export default function ViewMemo({
         <div className="grid grid-cols-2 gap-3 text-sm">
           {[
             ["To Department", memo.toDepartment],
-            ["From",          `${creator?.name} (${creator?.department})`],
+            ["From",          `${creator?.name || "—"} (${creator?.department || "—"})`],
             ["Date Created",  memo.createdAt],
             ["Status",        memo.status],
           ].map(([label, value]) => (
@@ -215,7 +287,7 @@ export default function ViewMemo({
           </div>
         </div>
 
-        {/* Signers */}
+        {/* Signers — names are clickable to view profile */}
         <div>
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Signers</p>
           <div className="grid grid-cols-3 gap-4">
@@ -226,7 +298,7 @@ export default function ViewMemo({
             ].map(({ label, user, color }) => (
               <div key={label} className={`border rounded-2xl p-4 ${color}`}>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{label}</p>
-                <p className="font-semibold text-gray-800">{user?.name || "—"}</p>
+                <UserLink user={user} />
                 <p className="text-xs text-gray-500 mt-0.5">{user?.department || "—"}</p>
                 {user?.email && (
                   <p className="text-xs text-blue-500 mt-0.5">{user.email}</p>
